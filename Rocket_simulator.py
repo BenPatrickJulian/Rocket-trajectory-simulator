@@ -171,8 +171,8 @@ def show_openrocket_overlay(time_array, position_array, velocity_array, OR_posit
         plt.plot(time_array, OR_position_array, label='Openrocket Data')
         plt.ylabel("Height/m")
     elif Graph == 'velocity':
-        plt.plot(time, velocity_array, label='Data')
-        plt.plot(time, OR_velocity_array, label='Openrocket Data')
+        plt.plot(time_array, velocity_array, label='Data')
+        plt.plot(time_array, OR_velocity_array, label='Openrocket Data')
         plt.ylabel("Velocity/ms-1")
     plt.xlabel("Time/s")
     plt.legend()
