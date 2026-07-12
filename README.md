@@ -16,8 +16,10 @@ $$\Sigma F = F_{\text{thrust}} - F_{\text{drag}} - F_{\text{gravity}}$$
 
 Drag is calculated via the quadratic drag formula and the air density calculated by the barometric formula. Thrust is found by interpolating the thrust curve found at https://www.thrustcurve.org/ for the given engine. This acceleration is then numerically integrated to a velocity and position which is then recorded and plotted against time at the end. 
 
+After consideration and research doing a component breakdown approach for drag coefficient will not be accurate enough to implement until the model uses 6 degrees of freedom therefore the improvement is moved until after updated to 6 degrees of freedom.
+
 ## Improvements to come 
-- [ ] Drag coefficient is to be calculated using a component breakdown approach with 3 main points the skin friction drag, base drag and pressure drag allowing it to change dynamically throughout.
 - [ ] Runge-kutta 4th order integration is to be implemented over euler-cromer integration making it far more accurate and precise.
 - [ ] The model is to be updated to 3 degrees of freedom to be able to model more advanced situations
 - [ ] The model is to be updated to 6 degrees of freedom as to be more accurate and able to analyze stability as well as trajectory
+- [ ] Drag coefficient is to be calculated using a component breakdown approach with 3 main points the skin friction drag, base drag and pressure drag allowing it to change dynamically throughout.
