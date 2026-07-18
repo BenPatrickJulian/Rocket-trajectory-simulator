@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Created on Tue Jun  2 15:23:40 2026
 
@@ -12,11 +11,11 @@ import pandas as pd
 
 # Things changeable
 
-dt = 0.001
+dt = 0.01
 Diameter_of_main_tube = 4.18*10**-2
 empty_mass = 160*10**-3
 fuel_mass = 30*10**-3
-Total_impulse = 57.1
+Total_impulse = 57.9
 Name_of_motor_file = 'AeroTech_F35W.csv'
 Graph = 'position'
 percentages_shown = True
@@ -96,20 +95,12 @@ def update_mass(empty_mass, fuel_mass, time, Area_under_curve, Total_impulse):
     return total_mass
 
 def update_acceleration(F_drag, F_thrust, total_mass, fuel_empty):
-    F_weight = total_mass*9.81
+    F_weight = total_mass*g
     if fuel_empty == True:
         F_thrust = 0
     F_total = F_thrust - F_drag - F_weight
     acceleration = F_total/total_mass
     return acceleration
-
-def update_velocity(acceleration, dt, velocity):
-    velocity = velocity + acceleration*dt
-    return velocity
-
-def update_position(acceleration, velocity, dt, position):
-    position = position + velocity*dt + 0.5*acceleration*(dt**2)
-    return position
 
 def check_fuel_supply(Total_impulse, Area_under_curve):
     if Area_under_curve/Total_impulse >= 0.99:
@@ -144,6 +135,41 @@ def update_mass_density(sea_level_standard_pressure, Temperature_lapse_rate, sea
     pressure = sea_level_standard_pressure*(1-(Temperature_lapse_rate*position)/sea_level_standard_temperature)**(5.25588)
     mass_density = pressure/(287.05*(sea_level_standard_temperature-Temperature_lapse_rate*position))
     return mass_density
+
+def calculate_rocket_derivatives(time, position, velocity, Impulse_at_time_t, F_thrust):
+    fuel_empty = check_fuel_supply(Total_impulse, Impulse_at_time_t)
+    F_thrust, _ = update_Thrust_and_impulse(F_thrust, time, time_values, thrust_values, Impulse_at_time_t)
+    total_mass = empty_mass
+    if fuel_empty == False:
+        total_mass = update_mass(empty_mass, fuel_mass, time, Impulse_at_time_t, Total_impulse)
+    air_mass_density = update_mass_density(sea_level_standard_pressure, Temperature_lapse_rate, sea_level_standard_temperature, position)
+    F_drag = calculate_drag(air_mass_density, drag_coefficient, reference_area, velocity)
+    acceleration = update_acceleration(F_drag, F_thrust, total_mass, fuel_empty)
+    return velocity, acceleration, F_thrust
+
+def RK4(time, position, velocity, Impulse_at_time_t, F_thrust, dt):
+    k1_v, k1_a, k1_i = calculate_rocket_derivatives(time, position, velocity, Impulse_at_time_t, F_thrust)
+    t_mid = time + dt/2
+    position_mid1 = position + k1_v * (dt/2)
+    velocity_mid1 = velocity + k1_a * (dt/2)
+    imp_mid1 = Impulse_at_time_t + k1_i * (dt/2)
+    
+    k2_v, k2_a, k2_i = calculate_rocket_derivatives(t_mid, position_mid1, velocity_mid1, imp_mid1, F_thrust)
+    position_mid2 = position + k2_v * (dt/2)
+    velocity_mid2 = velocity + k2_a *(dt/2)
+    imp_mid2 = Impulse_at_time_t + k2_i * (dt / 2)
+    
+    k3_v, k3_a, k3_i = calculate_rocket_derivatives(t_mid, position_mid2, velocity_mid2, imp_mid2, F_thrust)
+    t_end = time+dt
+    position_end = position + k3_v * dt
+    velocity_end = velocity + k3_a * dt
+    imp_end = Impulse_at_time_t + k3_i * dt
+    
+    k4_v, k4_a, k4_i = calculate_rocket_derivatives(t_end, position_end, velocity_end, imp_end, F_thrust)
+    position = position + (dt / 6) * (k1_v + 2*k2_v + 2*k3_v + k4_v)
+    velocity = velocity + (dt / 6) * (k1_a + 2*k2_a + 2*k3_a + k4_a)
+    Impulse_at_time_t = Impulse_at_time_t + (dt / 6) * (k1_i + 2*k2_i + 2*k3_i + k4_i)
+    return position, velocity, Impulse_at_time_t, k1_a
 
 def calculate_NRMSE(time_array, position_array, velocity_array, acceleration_array, OR_position_array, OR_velocity_array, OR_acceleration_array, apogee, max_velocity, max_acceleration):
     position_sum = 0
@@ -184,20 +210,10 @@ thrust_values = thrust_array[:, 1]
 
 Flying = True
 while Flying == True:
-    time = time + dt
-    fuel_empty = check_fuel_supply(Total_impulse, Impulse_at_time_t)
-    F_thrust, Impulse_at_time_t = update_Thrust_and_impulse(F_thrust, time, time_values, thrust_values, Impulse_at_time_t)
-    if fuel_empty == False:
-        total_mass = update_mass(empty_mass, fuel_mass, time, Impulse_at_time_t, Total_impulse)
-    air_mass_density = update_mass_density(sea_level_standard_pressure, Temperature_lapse_rate, sea_level_standard_temperature, position)
-    if position >= 8000 and position <= 8020:
-        m_air_density = air_mass_density
-    F_drag = calculate_drag(air_mass_density, drag_coefficient, reference_area, velocity)
-    acceleration = update_acceleration(F_drag, F_thrust, total_mass, fuel_empty)
-    velocity = update_velocity(acceleration, dt, velocity)
-    position = update_position(acceleration, velocity, dt, position)
+    position, velocity, Impulse_at_time_t, acceleration = RK4(time, position, velocity ,Impulse_at_time_t, F_thrust, dt)
     if position<-0.01:
         Flying = False 
+    time = time + dt
     apogee, apogee_time = update_apogee(position, apogee, time, apogee_time)
     max_velocity = update_max_velocity(velocity, max_velocity)
     max_acceleration = update_max_acceleration(acceleration, max_acceleration)
@@ -208,7 +224,7 @@ while Flying == True:
 
 print(f"Apogee was {apogee:.3g}m at {apogee_time:.3g}s")
 print(f"Max velocity was {max_velocity:.3g}ms-1")
-print(f"Max acceleration was {max_acceleration:.3g}ms-1")
+print(f"Max acceleration was {max_acceleration:.3g}ms-2")
 
 if percentages_shown == True:
     openrocket_data = get_data_from_file(Openrocket_file_name)
@@ -232,7 +248,7 @@ elif Graph == 'velocity':
     plt.ylabel("Velocity/ms-1")
 plt.xlabel("Time/s")
 plt.grid()
-plt.show()    
+plt.show() 
     
 
 
