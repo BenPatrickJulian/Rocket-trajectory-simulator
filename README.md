@@ -18,6 +18,8 @@ Drag is calculated via the quadratic drag formula and the air density calculated
 
 After consideration and research doing a component breakdown approach for drag coefficient will not be accurate enough to implement until the model uses 6 degrees of freedom therefore the improvement is moved until after updated to 6 degrees of freedom.
 
+It should be noted that whilst in 1D the drag coefficient is fixed from openrocket even while it reaches apogee and falls at which the drag coefficent changes drastically. This leads to the simulation after the apogee to be innacurate compared to pre-apogee.
+
 ## Improvements to come 
 - [x] Runge-kutta 4th order integration is to be implemented over euler-cromer integration making it far more accurate and precise.
 - [ ] The model is to be updated to 3 degrees of freedom to be able to model more advanced situations
