@@ -1,5 +1,5 @@
 # Rocket-trajectory-simulator
-A custom rocket flight dynamics simulator written in python.
+A 3 dimensional custom rocket flight dynamics simulator written in python.
 
 To use this code the user must have numpy, pandas and matplotlib.pyplot downloaded as well as a csv file containing the raw data of the thrust curve of the engine in the same directory and a csv file of openrockets raw data of the flight in the same directory if you want the comparison between the 2. The variables at the top of the file indicated to be changed must be changed to the dimensions and qualities of the rocket being modelled.
 
