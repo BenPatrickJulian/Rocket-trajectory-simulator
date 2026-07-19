@@ -6,7 +6,7 @@ To use this code the user must have numpy, pandas and matplotlib.pyplot download
 ## Features 
 * Runge-kutta 4th order integration is used to evaluate position and velocity from the acceleration.
 * customisable rocket: Many different parts of the rocket are changeable due to what rocket is being used.
-* 1D plotting capabilities: Choice of altitude, velocity and acceleration can be plotted against time and the max of each of these shown. As well as this the curves can be plotted against openrocket and a normalized root mean square error is used to analyze the accuracy consistently being >95% in each of these curves.
+* 3 degrees of freedom supported using vector algebra allowing it to fly at different angles and track horizontal displacement.
 * A variable air density calculator using the barometric formula.
 
 ## Physics engine
@@ -22,6 +22,6 @@ It should be noted that whilst in 1D the drag coefficient is fixed from openrock
 
 ## Improvements to come 
 - [x] Runge-kutta 4th order integration is to be implemented over euler-cromer integration making it far more accurate and precise.
-- [ ] The model is to be updated to 3 degrees of freedom to be able to model more advanced situations
+- [x] The model is to be updated to 3 degrees of freedom to be able to model more advanced situations
 - [ ] The model is to be updated to 6 degrees of freedom as to be more accurate and able to analyze stability as well as trajectory
 - [ ] Drag coefficient is to be calculated using a component breakdown approach with 3 main points the skin friction drag, base drag and pressure drag allowing it to change dynamically throughout.
