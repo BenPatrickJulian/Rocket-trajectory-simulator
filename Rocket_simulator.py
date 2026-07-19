@@ -1,13 +1,16 @@
 """
-Created on Tue Jun  2 15:23:40 2026
+Created on Sun Jul 19 14:49:50 2026
 
-@author: n14123bj
+@author: patri
 """
 
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+
+# (x, y, z), set x to east, y to north and z to upwards 
+# _v for vectors
 
 # Things changeable
 
@@ -16,8 +19,10 @@ Diameter_of_main_tube = 4.18*10**-2
 empty_mass = 160*10**-3
 fuel_mass = 30*10**-3
 Total_impulse = 57.9
+launch_rod_angle = 0 # compass bearing co ordinates in east facing direction
+launch_rod_length = 1
 Name_of_motor_file = 'AeroTech_F35W.csv'
-Graph = 'position'
+Graph = 'altitude'
 percentages_shown = True
 overlay_openrocket = True
 Openrocket_file_name = 'openrocket_data.csv'
@@ -39,24 +44,22 @@ Temperature_lapse_rate = 0.0065
 # Set Things to 0
 
 time = 0
-acceleration = 0
-velocity = 0 
-position = 0
+acceleration_v = np.array([0.0, 0.0, 0.0]) 
+velocity_v = np.array([0.0, 0.0, 0.0])
+position_v = np.array([0.0, 0.0, 0.0])
 time_array = []
-position_array = []
-velocity_array = []
-acceleration_array = []
-position_comparison_array = [0,0,0]
-velocity_comparison_array = [0,0,0]
+position_array = np.array([0,0,0])
+velocity_array = np.array([0,0,0])
+acceleration_array = np.array([0,0,0])
 Impulse_at_time_t = 0
-F_previous = 0
-F_thrust = 0
+F_previous_v =  np.array([0,0,0])
+F_thrust_v =  np.array([0,0,0])
 max_velocity = 0
 max_acceleration = 0
 apogee = 0
 apogee_time = 0
-m_air_density = 0
 Graph = Graph.lower()
+launch_rod_vector = np.array([np.sin((launch_rod_angle/360)*2*np.pi), 0, np.cos((launch_rod_angle/360)*2*np.pi)])
 
 # Functions
 
@@ -86,90 +89,106 @@ def get_data_from_file(file_name):
 
     return np.array(clean_rows)
 
-def calculate_drag(mass_density, drag_c, ref_area, velocity):
-    F_drag = 0.5*mass_density*drag_c*ref_area*(velocity**2)*np.sign(velocity)
-    return F_drag
+def calculate_drag(mass_density, drag_c, ref_area, velocity_v):
+    linear_velocity = np.linalg.norm(velocity_v)
+    F_drag = 0.5*mass_density*drag_c*ref_area*(linear_velocity**2)*np.sign(linear_velocity)
+    F_drag_v = F_drag*normalize_vector(velocity_v)
+    return F_drag_v
 
 def update_mass(empty_mass, fuel_mass, time, Area_under_curve, Total_impulse):
     total_mass = empty_mass + fuel_mass - (Area_under_curve/Total_impulse)*fuel_mass
     return total_mass
 
-def update_acceleration(F_drag, F_thrust, total_mass, fuel_empty):
-    F_weight = total_mass*g
+def update_acceleration(F_drag_v, F_thrust_v, total_mass, fuel_empty):
+    F_weight_v = np.array([0, 0, total_mass*g])
     if fuel_empty == True:
-        F_thrust = 0
-    F_total = F_thrust - F_drag - F_weight
-    acceleration = F_total/total_mass
-    return acceleration
+        F_thrust_v = np.array([0,0,0])
+    F_total_v = F_thrust_v - F_drag_v - F_weight_v
+    acceleration_v = F_total_v/total_mass
+    return acceleration_v
 
 def check_fuel_supply(Total_impulse, Area_under_curve):
-    if Area_under_curve/Total_impulse >= 0.99:
+    if Area_under_curve/Total_impulse >= 0.9999:
         return True
     else:
         return False
+
+def normalize_vector(v):
+    norm = np.linalg.norm(v)
+    if norm == 0: 
+        return v
+    return v / norm
     
-def update_apogee(position, apogee, time, apogee_time):
-    if position >= apogee:
-        apogee = position
+def update_apogee(position_z, apogee, time, apogee_time):
+    if position_z >= apogee:
+        apogee = position_z
         apogee_time = time
     return apogee, apogee_time
 
-def update_max_velocity(velocity, max_velocity):
-    if velocity >= max_velocity:
-        max_velocity = velocity
+def update_max_velocity(linear_velocity, max_velocity):
+    if linear_velocity >= max_velocity:
+        max_velocity = linear_velocity
     return max_velocity
 
-def update_max_acceleration(acceleration, max_acceleration):
-    if acceleration >= max_acceleration:
-        max_acceleration = acceleration
+def update_max_acceleration(linear_acceleration, max_acceleration):
+    if linear_acceleration >= max_acceleration:
+        max_acceleration = linear_acceleration
     return max_acceleration
 
-def update_Thrust_and_impulse(F_thrust, time, time_values, thrust_values, Impulse_at_time_t):
-    F_previous = F_thrust
-    F_thrust = np.interp(time, time_values, thrust_values, right=0.0)
-    Impulse_added = dt*0.5*(F_thrust + F_previous)
+def update_Thrust_and_impulse(F_thrust_v, time, time_values, thrust_values, Impulse_at_time_t, velocity_v):
+    F_previous_v = F_thrust_v
+    F_thrust_v = np.interp(time, time_values, thrust_values, right=0.0)*normalize_vector(velocity_v)
+    Impulse_added = dt*0.5*(np.linalg.norm(F_thrust_v) + np.linalg.norm(F_previous_v))
     Impulse_at_time_t = Impulse_at_time_t + Impulse_added
-    return F_thrust, Impulse_at_time_t
+    return F_thrust_v, Impulse_at_time_t
 
-def update_mass_density(sea_level_standard_pressure, Temperature_lapse_rate, sea_level_standard_temperature, position):
-    pressure = sea_level_standard_pressure*(1-(Temperature_lapse_rate*position)/sea_level_standard_temperature)**(5.25588)
-    mass_density = pressure/(287.05*(sea_level_standard_temperature-Temperature_lapse_rate*position))
+def update_mass_density(sea_level_standard_pressure, Temperature_lapse_rate, sea_level_standard_temperature, position_z):
+    position_z = max(0.0, min(position_z, 40000.0))
+    pressure = sea_level_standard_pressure*(1-(Temperature_lapse_rate*position_z)/sea_level_standard_temperature)**(5.25588)
+    mass_density = pressure/(287.05*(sea_level_standard_temperature-Temperature_lapse_rate*position_z))
     return mass_density
 
-def calculate_rocket_derivatives(time, position, velocity, Impulse_at_time_t, F_thrust):
+def calculate_rocket_derivatives(time, position_v, velocity_v, Impulse_at_time_t, launch_rod_vector):
+    F_thrust_scalar = np.interp(time, time_values, thrust_values, right=0.0)
     fuel_empty = check_fuel_supply(Total_impulse, Impulse_at_time_t)
-    F_thrust, _ = update_Thrust_and_impulse(F_thrust, time, time_values, thrust_values, Impulse_at_time_t)
     total_mass = empty_mass
     if fuel_empty == False:
         total_mass = update_mass(empty_mass, fuel_mass, time, Impulse_at_time_t, Total_impulse)
-    air_mass_density = update_mass_density(sea_level_standard_pressure, Temperature_lapse_rate, sea_level_standard_temperature, position)
-    F_drag = calculate_drag(air_mass_density, drag_coefficient, reference_area, velocity)
-    acceleration = update_acceleration(F_drag, F_thrust, total_mass, fuel_empty)
-    return velocity, acceleration, F_thrust
+    air_mass_density = update_mass_density(sea_level_standard_pressure, Temperature_lapse_rate, sea_level_standard_temperature, position_v[2])
+    
+    speed = np.linalg.norm(velocity_v)
+    if position_v[2]>launch_rod_length:
+        velocity_uv = velocity_v / speed
+        F_thrust_v = F_thrust_scalar * velocity_uv
+    else:
+        F_thrust_v = F_thrust_scalar * launch_rod_vector
+    F_drag_v = calculate_drag(air_mass_density, drag_coefficient, reference_area, velocity_v)
+    acceleration_v = update_acceleration(F_drag_v, F_thrust_v, total_mass, fuel_empty)
+    return velocity_v, acceleration_v, F_thrust_scalar
 
-def RK4(time, position, velocity, Impulse_at_time_t, F_thrust, dt):
-    k1_v, k1_a, k1_i = calculate_rocket_derivatives(time, position, velocity, Impulse_at_time_t, F_thrust)
+def RK4(time, position_v, velocity_v, Impulse_at_time_t, F_thrust_v, dt, launch_rod_vector):
+    k1_v, k1_a, k1_i = calculate_rocket_derivatives(time, position_v, velocity_v, Impulse_at_time_t, launch_rod_vector)
     t_mid = time + dt/2
-    position_mid1 = position + k1_v * (dt/2)
-    velocity_mid1 = velocity + k1_a * (dt/2)
+    position_mid1_v = position_v + k1_v * (dt/2)
+    velocity_mid1_v = velocity_v + k1_a * (dt/2)
     imp_mid1 = Impulse_at_time_t + k1_i * (dt/2)
     
-    k2_v, k2_a, k2_i = calculate_rocket_derivatives(t_mid, position_mid1, velocity_mid1, imp_mid1, F_thrust)
-    position_mid2 = position + k2_v * (dt/2)
-    velocity_mid2 = velocity + k2_a *(dt/2)
+    k2_v, k2_a, k2_i = calculate_rocket_derivatives(t_mid, position_mid1_v, velocity_mid1_v, imp_mid1, launch_rod_vector)
+    position_mid2_v = position_v + k2_v * (dt/2)
+    velocity_mid2_v = velocity_v + k2_a *(dt/2)
     imp_mid2 = Impulse_at_time_t + k2_i * (dt / 2)
     
-    k3_v, k3_a, k3_i = calculate_rocket_derivatives(t_mid, position_mid2, velocity_mid2, imp_mid2, F_thrust)
+    k3_v, k3_a, k3_i = calculate_rocket_derivatives(t_mid, position_mid2_v, velocity_mid2_v, imp_mid2, launch_rod_vector)
     t_end = time+dt
-    position_end = position + k3_v * dt
-    velocity_end = velocity + k3_a * dt
+    position_end_v = position_v + k3_v * dt
+    velocity_end_v = velocity_v + k3_a * dt
     imp_end = Impulse_at_time_t + k3_i * dt
     
-    k4_v, k4_a, k4_i = calculate_rocket_derivatives(t_end, position_end, velocity_end, imp_end, F_thrust)
-    position = position + (dt / 6) * (k1_v + 2*k2_v + 2*k3_v + k4_v)
-    velocity = velocity + (dt / 6) * (k1_a + 2*k2_a + 2*k3_a + k4_a)
+    k4_v, k4_a, k4_i = calculate_rocket_derivatives(t_end, position_end_v, velocity_end_v, imp_end, launch_rod_vector)
+    position_v = position_v + (dt / 6) * (k1_v + 2*k2_v + 2*k3_v + k4_v)
+    velocity_v = velocity_v + (dt / 6) * (k1_a + 2*k2_a + 2*k3_a + k4_a)
     Impulse_at_time_t = Impulse_at_time_t + (dt / 6) * (k1_i + 2*k2_i + 2*k3_i + k4_i)
-    return position, velocity, Impulse_at_time_t, k1_a
+    return position_v, velocity_v, Impulse_at_time_t, k1_a
 
 def calculate_NRMSE(time_array, position_array, velocity_array, acceleration_array, OR_position_array, OR_velocity_array, OR_acceleration_array, apogee, max_velocity, max_acceleration):
     position_sum = 0
@@ -192,7 +211,7 @@ def calculate_NRMSE(time_array, position_array, velocity_array, acceleration_arr
     print("The acceleration was", 100 - NRMSE_acceleration*100, "% correct")
 
 def show_openrocket_overlay(time_array, position_array, velocity_array, OR_position_array, OR_velocity_array):
-    if Graph == 'position':
+    if Graph == 'altitude':
         plt.plot(time_array, position_array, label='Data')
         plt.plot(time_array, OR_position_array, label='Openrocket Data')
         plt.ylabel("Height/m")
@@ -208,23 +227,30 @@ thrust_array = get_data_from_file(Name_of_motor_file)
 time_values = thrust_array[:, 0]
 thrust_values = thrust_array[:, 1]
 
+time_array = []
+position_array = np.empty((0, 3))
+velocity_array = np.empty((0, 3))
+acceleration_array = np.empty((0, 3))
+
 Flying = True
 while Flying == True:
-    position, velocity, Impulse_at_time_t, acceleration = RK4(time, position, velocity ,Impulse_at_time_t, F_thrust, dt)
-    if position<-0.01:
+    position_v, velocity_v, Impulse_at_time_t, acceleration_v = RK4(time, position_v, velocity_v, Impulse_at_time_t, F_thrust_v, dt, launch_rod_vector)
+    if position_v[2]<-0.01:
         Flying = False 
     time = time + dt
-    apogee, apogee_time = update_apogee(position, apogee, time, apogee_time)
-    max_velocity = update_max_velocity(velocity, max_velocity)
-    max_acceleration = update_max_acceleration(acceleration, max_acceleration)
+    apogee, apogee_time = update_apogee(position_v[2], apogee, time, apogee_time)
+    max_velocity = update_max_velocity(np.linalg.norm(velocity_v), max_velocity)
+    max_acceleration = update_max_acceleration(np.linalg.norm(acceleration_v), max_acceleration)
     time_array.append(time)
-    position_array.append(position)
-    velocity_array.append(velocity)
-    acceleration_array.append(acceleration)
+    position_array = np.vstack([position_array, position_v])
+    velocity_array = np.vstack([velocity_array, velocity_v])
+    acceleration_array = np.vstack([acceleration_array, acceleration_v])
 
 print(f"Apogee was {apogee:.3g}m at {apogee_time:.3g}s")
 print(f"Max velocity was {max_velocity:.3g}ms-1")
 print(f"Max acceleration was {max_acceleration:.3g}ms-2")
+print(f"Horizontal Displacment was {position_array[-1, 0]:.3g}m")
+
 
 if percentages_shown == True:
     openrocket_data = get_data_from_file(Openrocket_file_name)
@@ -235,21 +261,22 @@ if percentages_shown == True:
     interp_accurate_position = np.interp(time_array, accurate_time, accurate_position)
     interp_accurate_velocity = np.interp(time_array, accurate_time, accurate_velocity)
     interp_accurate_acceleration = np.interp(time_array, accurate_time, accurate_acceleration)
-    calculate_NRMSE(time_array, position_array, velocity_array, acceleration_array, interp_accurate_position, interp_accurate_velocity, interp_accurate_acceleration, apogee, max_velocity, max_acceleration)
+    calculate_NRMSE(time_array, position_array[:, 2], velocity_array[:, 2], acceleration_array[:, 2], interp_accurate_position, interp_accurate_velocity, interp_accurate_acceleration, apogee, max_velocity, max_acceleration)
 
 if overlay_openrocket == True:
-    show_openrocket_overlay(time_array, position_array, velocity_array, interp_accurate_position, interp_accurate_velocity)
+    show_openrocket_overlay(time_array, position_array[:, 2], velocity_array[:, 2], interp_accurate_position, interp_accurate_velocity)
 
-if Graph == 'position':
-    plt.plot(time_array, position_array)
+if Graph == 'altitude':
+    plt.plot(time_array, position_array[:, 2])
     plt.ylabel("Height/m")
+elif Graph == 'displacement':
+    plt.plot(time_array, position_array[:, 0])
+    plt.ylabel("displacement/m")
 elif Graph == 'velocity':
-    plt.plot(time_array, velocity_array)
+    plt.plot(time_array, velocity_array[:, 2])
     plt.ylabel("Velocity/ms-1")
 plt.xlabel("Time/s")
-plt.grid()
 plt.show() 
-    
 
 
 
